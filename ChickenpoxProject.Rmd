@@ -1,0 +1,247 @@
+---
+title: "Chickenpox Cases in Budapest"
+author: "Andrea"
+date: "11/23/2021"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Intro
+
+We obtained a time series data set for chickenpox cases in the city of Budapest (Hungary) in the period 2005-2014 included, those data were collected weekly. This imply that there are 52 data points per year, for a total of 520 points, and so we decided to build a model for future forecasting using the first 9 years of the collected data for a total of 468 data points spanning from 2005 to 2013. Then we used the last 52 data points of this time series to verify the accuracy of the model by comparison with actual collected data.
+
+```{r, echo = FALSE}
+#set working directory
+setwd("/Volumes/Samsung USB/TimeSeriesProject")
+#read table
+#Commented to avoid further readings
+#hungary_chickenpox <- read_csv("hungary_chickenpox.csv", col_types = cols_only(Date = col_date(format = "%d/%m/%Y"), BUDAPEST = col_double()))
+#head(hungary_chickenpox,60)
+#load the installed 'TTR' package for time-series
+hungary_chickenpox = read.table("hungary_chickenpox.txt", sep = "\t", header = T)
+require(TTR)
+
+#Create Time-Series objects
+#FULL TIME-SERIES object with weekly records of chickenpox cases from 2005 to end of 2014
+TSHungChickenpox = ts(hungary_chickenpox$X, frequency = 52, start = c(2005,1))
+
+#TRAIN TIME-SERIES object with weekly records of chickenpox cases from 2005 to end of 2013 (last year, 2014 omitted)
+Train = hungary_chickenpox[row.names(hungary_chickenpox) %in% 1:470, ]
+TSHungChickenpoxTrain = ts(Train$X, frequency = 52, start = 2005)
+
+#TEST TIME-SERIE object with weekly records of chickenpox cases only for last year, 2014
+Test = hungary_chickenpox[row.names(hungary_chickenpox) %in% 471:522, ]
+TSHungChickenpoxTest = ts(Test$X, frequency = 52, start = 2014)
+head(hungary_chickenpox)
+
+#Traian Time-series
+plot(TSHungChickenpox,bty = "n",ylab = "# cases per week",main = "Complete Time Series (2005-2014)")
+plot(TSHungChickenpoxTrain,bty = "n",ylab = "# cases per week",main = "Train Time Series (2005-2013)")
+plot(TSHungChickenpoxTest,bty = "n",ylab = "# cases per week",main = "Test Time Series (2014)")
+```
+
+## Observation from Complete Time-Series, Year-to-Year Breakdown and Decomposition:
+
+From the plot of the complete time series (2005-2014), we can observe both a cyclical effect and a seasonal variation as well. However, we want to look at trends per year by considering and isolating the first 3 year to check for patterns and finally using decomposition of components.
+
+```{r, echo = FALSE}
+df1 = hungary_chickenpox[row.names(hungary_chickenpox) %in% 1:52, ]
+df2 = hungary_chickenpox[row.names(hungary_chickenpox) %in% 53:105, ]
+df3 = hungary_chickenpox[row.names(hungary_chickenpox) %in% 106:158, ]
+TSHungChickenpox1 = ts(df1$X, frequency = 52, start = 2005)
+plot(TSHungChickenpox1,ylab = "# cases per week", xlab = " nth Week (0.2 = 10.5 weeks)", main = "2005 Breakdown", bty = "n");text(x=2005.3, y = 175, "Max # cases occurs at 20th week", cex = 0.8, col = "red");text(x=2005.7, y = 5, "Min # case occurs at 36th week", cex = 0.8, col = "blue")
+TSHungChickenpox2 = ts(df2$X, frequency = 52, start = 2006)
+plot(TSHungChickenpox2,ylab = "# cases per week", xlab = " nth Week (0.2 = 10.5 weeks)", main = "2006 Breakdown", bty = "n");text(x=2006.3, y = 360, "Max # cases occurs at 17/18th week", cex = 0.8, col = "red");text(x=2006.7, y = 7, "Min # of case occurs at 32th week", cex = 0.8, col = "blue")
+TSHungChickenpox3 = ts(df3$X, frequency = 52, start = 2007)
+plot(TSHungChickenpox3, ylab = "# cases per week", xlab = " nth Week (0.2 = 10.5 weeks)", main = "2007 Breakdown", bty = "n");text(x=2007.4, y = 393, "Max # of cases occurs at 20th week", cex = 0.8, col = "red");text(x=2007.7, y = 2, "Min # of cases occurs at 31th week", cex = 0.8, col = "blue")
+```
+
+##### Observations
+
+We can notice that between years we have repeated patterns with surges of cases around the 20th week of the year (April), followed by a sudden negative rate of change where the number of cases hit the lowest point of the year around the 32th week (late summer). We performed the complete analysis year by year and we noticed that this behavior repeats for all the 10 years without an apparent secular trend. Therefore, overall, the number of chickenpox cases in Budapest from 2005 to 2014, fluctuate, but remain constant. In order to confirm our thesis, we wanted to plot the individual components of the time series.
+
+#### Decomposition of Time Series
+
+```{r, echo = FALSE}
+TSdecomp = decompose(TSHungChickenpoxTrain)
+### TSdecomp
+plot(TSdecomp)
+
+```
+
+##### Observations
+
+The plot of the individual time series components confirms our suspects. We cannot says that there exists a recognizable line in the trend graph, and so can infer that the secular trend effect is negligible. On the other hand, because we can observe repeated patterns in the seasonal component graph, we can conclude that there is indeed a very clear seasonal variation affecting the number of chickenpox cases in Budapest.
+
+From the seasonal component graph, we can notice the negative value for every half of a year, this behavior is a corroborating evidence of our preliminary investigation of the time series. It looks like a spike of chicken pox cases in the 20th week of the year, is followed by a fast decreasing, and this pattern repeat itself from year to year from 2005 to 2014
+
+## Building Models for Forecasting
+
+#### Model 1: exponential smoothing
+
+In exponential smoothing we wanted to find an alpha parameter that can reduce all the 'noise' attributed by the residual effect in this time series. In this case the best suited parameter is an alpha = 0.419.
+
+```{r, echo = FALSE}
+require(forecast)
+EXPHungChickenpox = HoltWinters(TSHungChickenpoxTrain, alpha = NULL, beta = FALSE, gamma = FALSE)
+EXPHungChickenpox
+F_EXPHungChickenpox = forecast(EXPHungChickenpox, h = 52) #for forecasting
+plot(EXPHungChickenpox)
+#F_EXPHungChickenpox
+#plot(EXPHungChickenpox);line(F_EXPHungChickenpox$mean)
+
+```
+
+By looking at the graph, this smoothing technique gives a parameter of 128.9041. When it comes to find best fitted values, the smoothed time series shows a good degree of accuracy as we can notice by looking at the graph. However, when it comes to forecasting, the smoothed time series with a = 0.41 remain constants to 33.263 chicken pox cases for all the future values of t+n\*weeks after week 1 of year 2014.
+
+#### Model 2: Holt-Winters
+
+Because of the very high seasonal variation we observed in the time series, we wanted to apply smoothing on seasonal variation as well. In doing so we are going to use the following parameters for Holt-Winters, alpha = 0.214, beta = 0.002, gamma = 0.561. Because of the negligible secular trend and the high seasonal variation, we wanted to keep beta very low and gamma high
+
+```{r, echo = FALSE}
+HWHungChickenpox = HoltWinters(TSHungChickenpoxTrain, alpha = NULL, beta = NULL, gamma = NULL)
+HWHungChickenpox
+F_HWHungChickenpox = forecast(HWHungChickenpox, h = 52) #for forecasting
+plot(HWHungChickenpox)
+#F_HWHungChickenpox
+#plot(F_HWHungChickenpox)
+
+```
+
+Although, smoothing with Holt-Winters gives fitted values for the time series a little bit off with respect of exponential smoothing, because it takes seasonal variation in consideration, we predict that it may gives moreprecise forecast values once compared with the test time series.
+
+#### Model 3: Regression
+
+We wanted to construct a regression model for fitted values and forecasting as well. Since, by now, it is certain that the number of chicken pox cases are affected by seasonality, in our regression model we want to include seasonal variation.
+
+```{r, echo = FALSE}
+#Need to add a new column for t and nth week of the year, also because we cannot divide
+#522 by 10, I need to remove 2 data points. With 520 points I have 52 weeks per year
+NEWhungary_chickenpox = hungary_chickenpox[c(-522:-469), ]
+NEWhungary_chickenpox$t = c(1:468)
+NEWhungary_chickenpox$nthWeek = c(1:52)
+RegHungChickenpox = lm(X~t+as.factor(nthWeek), data = NEWhungary_chickenpox)
+summary(RegHungChickenpox)
+
+```
+
+By the R output, we can write the estimated time series regression model for the number of cases of chickenpox in Budapest. Because there are 52 weeks, in our model we have 52 categorical here defined as nth week of the year where the first week of the year is considered the base case. Here in our interpretation of the model we will only consider some of those
+
+\#cases_hat = 94.561 -0.010\*t +57.566\*2ndWeek +137.355\*3rdWeek + 45.476\*4thweek +............+8.766\*52thWeek
+
+The regression model is consistent with our prior findings, the coefficient of time t is very close to zero, this imply that the secular trend is extremely low. Another interesting finding is that as the week changes from first week of the year to second week of the year, the average expected number of cases increases by 57.566.
+
+```{r}
+#RegHungChickenpox must be changed to a timeseries object
+TSRegHungChickenpox = ts(RegHungChickenpox$fitted.values, frequency = 52, start=c(2005,1))
+
+plot(HWHungChickenpox, main = "Comparison of Models");lines(EXPHungChickenpox$fitted[ ,1], col = "blue");lines(TSRegHungChickenpox, col = "green");legend("topright",legend = c("HoltWinters", "Exponential", "TSRegression"), col = c("red", "blue", "green"), pch=c(16,16,16))
+
+```
+
+## Forecasting chicken pox cases for the first 4 weeks of 2014
+
+Now we want to forecasts the first 6 weeks of chicken pox cases in Budapest by applying our three models we build before by applying exponential smoothing, Holt Winter, and Regression.
+
+#### Forecasting using Model 1: Exponential Smoothing with alpha = 0.419
+
+Forecasting using exponential smoothing gives a constant values for all future n weeks starting from week 1 of year 2014. Here the forecasting using our exponential smoothed model it predicts 128.9 chicken pox cases for the first 4 weeks of year 2014.
+
+```{r, echo = FALSE}
+head(F_EXPHungChickenpox$mean, 4)
+
+```
+
+It follows a forecasting for the whole 2014 year versus the test data set (last recorded year), along with MAPE, MAD and RMSE tests as a measure of overall forecast accuracy for the first 4 weeks of 2014
+
+```{r}
+plot(TSHungChickenpoxTest, ylab = "# Chicken pox cases", main = "2014 Forecast with Exponential Smoothed Model");abline(h = 33.263, col = "blue");legend("topright",legend = c("Test Data", "Exponential Forecast"), col = c("black", "blue"), pch=c(16,16))
+
+###########EXPONENTIAL SMOOTHING
+yt = c(150,80,82,58)
+EXFt = rep(33.263, 4)  #Exp smoothing forecasting gives constants values for predictions
+EXMAD = mean(abs(yt-EXFt))
+
+
+#MAPETEst
+EXMAPE = mean(abs((yt-EXFt)/yt))*100
+
+
+#RMSEtest
+EXRMSE = sqrt(mean((yt-EXFt)^2))
+x = round(c(EXMAD,EXMAPE, EXRMSE),3)
+y = c("MAPE", "MAD", "RMSE")
+print(paste(y,x, sep =":", collapse = ",  "))
+
+```
+
+#### Forecasting using Model 2: Holt-Winter with alpha = 0.214, beta = 0.002, gamma = 0.561
+
+Forecasting using this method it should forecast chicken pox cases for the first 4 weeks of 2014 closer to those from the test time series with respect to exponentially smoothed model. Here the forecasting using our Holt Winter model for the first 4 weeks of year 2014
+
+```{r}
+head(F_HWHungChickenpox$mean)
+```
+
+It follows a forecasting for the whole 2014 year versus the test data set (last recorded year), along with MAPE, MAD and RMSE tests as a measure of overall forecast accuracy for the first 4 weeks of 2014
+
+```{r}
+plot(TSHungChickenpoxTest, ylab = "# Chicken pox cases", main = "2014 Forecast with Holt-Winters Model");lines(F_HWHungChickenpox$mean, col = "blue");legend("topright",legend = c("Test Data", "Holt-Winters Forecast"), col = c("black", "blue"), pch=c(16,16))
+
+###########Holt-Winters SMOOTHING ACCURACY
+yt = c(150,80,82,58)
+HWFt = head(F_HWHungChickenpox$mean,4)
+HWMAD = mean(abs(yt-HWFt))
+
+
+#MAPETEst
+HWMAPE = mean(abs((yt-HWFt)/yt))*100
+
+
+#RMSEtest
+HWRMSE = sqrt(mean((yt-HWFt)^2))
+x = round(c(HWMAD,HWMAPE, HWRMSE),3)
+y = c("MAPE", "MAD", "RMSE")
+print(paste(y,x, sep =":", collapse = ",  "))
+
+```
+
+#### Forecasting using Model 3: Regression Model
+
+In this case we want to use our model to forecast number of cases of chicken pox in Budapest after the end of year 2013. Here the forecast for the first four weeks of 2014
+
+```{r}
+t = 468:471
+nthWeek = 1:4
+RegFt = predict(RegHungChickenpox, newdata = data.frame(t, as.factor(nthWeek)))
+names(RegFt) = c("Week1 2014", "Week2 2014","Week3 2014","Week4 2014")
+RegFt
+
+```
+
+It follows a forecasting for the whole 2014 year versus the test data set (last recorded year), along with MAPE, MAD and RMSE tests as a measure of overall forecast accuracy for the first 4 weeks of 2014
+
+```{r}
+TSReg = ts(RegHungChickenpox$fitted.values, frequency = 52, start=2014)
+
+plot(TSHungChickenpoxTest, ylab = "# Chicken pox cases", main = "2014 Forecast with Regression Model");lines(TSReg, col = "blue");legend("topright",legend = c("Test Data", "Regression Forecast"), col = c("black", "blue"), pch=c(16,16))
+
+###########REGRESSION MODEL ACCURACY
+yt = c(150,80,82,58)
+REGMAD = mean(abs(yt-RegFt))
+
+
+#MAPETEst
+REGMAPE = mean(abs((yt-RegFt)/yt))*100
+
+
+#RMSEtest
+REGRMSE = sqrt(mean((yt-RegFt)^2))
+x = round(c(REGMAD,REGMAPE, REGRMSE),3)
+y = c("MAPE", "MAD", "RMSE")
+print(paste(y,x, sep =":", collapse = ",  "))
+
+```
